@@ -5,32 +5,17 @@ from __future__ import division
 import math
 import json
 import random
-import pprint
+from pprint import pprint as pp
 import scipy.misc
-import cv2
 import numpy as np
-import os
-import time
-import datetime
 from time import gmtime, strftime
 from six.moves import xrange
 
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
-pp = pprint.PrettyPrinter()
-
 get_stddev = lambda x, k_h, k_w: 1/math.sqrt(k_w*k_h*x.get_shape()[-1])
 
-
-def expand_path(path):
-  return os.path.expanduser(os.path.expandvars(path))
-
-def timestamp(s='%Y%m%d.%H%M%S', ts=None):
-  if not ts: ts = time.time()
-  st = datetime.datetime.fromtimestamp(ts).strftime(s)
-  return st
-  
 def show_all_variables():
   model_vars = tf.trainable_variables()
   slim.model_analyzer.analyze_vars(model_vars, print_info=True)
@@ -49,11 +34,7 @@ def imread(path, grayscale = False):
   if (grayscale):
     return scipy.misc.imread(path, flatten = True).astype(np.float)
   else:
-    # Reference: https://github.com/carpedm20/DCGAN-tensorflow/issues/162#issuecomment-315519747
-    img_bgr = cv2.imread(path)
-    # Reference: https://stackoverflow.com/a/15074748/
-    img_rgb = img_bgr[..., ::-1]
-    return img_rgb.astype(np.float)
+    return scipy.misc.imread(path).astype(np.float)
 
 def merge_images(images, size):
   return inverse_transform(images)
@@ -93,11 +74,11 @@ def center_crop(x, crop_h, crop_w,
   return scipy.misc.imresize(
       x[j:j+crop_h, i:i+crop_w], [resize_h, resize_w])
 
-def transform(image, input_height, input_width, 
+def transform(image, input_height, input_width,
               resize_height=64, resize_width=64, crop=True):
   if crop:
     cropped_image = center_crop(
-      image, input_height, input_width, 
+      image, input_height, input_width,
       resize_height, resize_width)
   else:
     cropped_image = scipy.misc.imresize(image, [resize_height, resize_width])
@@ -186,17 +167,18 @@ def make_gif(images, fname, duration=2, true_image=False):
   clip = mpy.VideoClip(make_frame, duration=duration)
   clip.write_gif(fname, fps = len(images) / duration)
 
-def visualize(sess, dcgan, config, option, sample_dir='samples'):
+def visualize(sess, dcgan, config, option):
   image_frame_dim = int(math.ceil(config.batch_size**.5))
   if option == 0:
     z_sample = np.random.uniform(-0.5, 0.5, size=(config.batch_size, dcgan.z_dim))
     samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
-    save_images(samples, [image_frame_dim, image_frame_dim], os.path.join(sample_dir, 'test_%s.png' % strftime("%Y%m%d%H%M%S", gmtime() )))
+    #save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_%s.png' % strftime("%Y%m%d%H%M%S", gmtime()))
+    save_images(samples, [image_frame_dim, image_frame_dim],'./samples/' + config.dataset + '-' + (str)(config.batch_size) + '/test_%s.png'  % strftime("%Y%m%d%H%M%S", gmtime()))
   elif option == 1:
     values = np.arange(0, 1, 1./config.batch_size)
-    for idx in xrange(dcgan.z_dim):
+    for idx in xrange(100):
       print(" [*] %d" % idx)
-      z_sample = np.random.uniform(-1, 1, size=(config.batch_size , dcgan.z_dim))
+      z_sample = np.zeros([config.batch_size, dcgan.z_dim])
       for kdx, z in enumerate(z_sample):
         z[idx] = values[kdx]
 
@@ -209,10 +191,14 @@ def visualize(sess, dcgan, config, option, sample_dir='samples'):
       else:
         samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
 
-      save_images(samples, [image_frame_dim, image_frame_dim], os.path.join(sample_dir, 'test_arange_%s.png' % (idx)))
+      #save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_arange_%s.png' % (idx))
+      save_images(samples, [image_frame_dim, image_frame_dim],
+                  './samples/' + config.dataset + '-' + (str)(config.batch_size) + '/test_arange_%s.png'% config.dataset % (idx))
+
+      save_images(samples, [image_frame_dim, image_frame_dim], './samples/%s/test_arange_%s.png'% config.dataset % (idx))
   elif option == 2:
     values = np.arange(0, 1, 1./config.batch_size)
-    for idx in [random.randint(0, dcgan.z_dim - 1) for _ in xrange(dcgan.z_dim)]:
+    for idx in [random.randint(0, 99) for _ in xrange(100)]:
       print(" [*] %d" % idx)
       z = np.random.uniform(-0.2, 0.2, size=(dcgan.z_dim))
       z_sample = np.tile(z, (config.batch_size, 1))
@@ -232,36 +218,95 @@ def visualize(sess, dcgan, config, option, sample_dir='samples'):
       try:
         make_gif(samples, './samples/test_gif_%s.gif' % (idx))
       except:
-        save_images(samples, [image_frame_dim, image_frame_dim], os.path.join(sample_dir, 'test_%s.png' % strftime("%Y%m%d%H%M%S", gmtime() )))
+        save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_%s.png' % strftime("%Y%m%d%H%M%S", gmtime()))
   elif option == 3:
     values = np.arange(0, 1, 1./config.batch_size)
-    for idx in xrange(dcgan.z_dim):
+    for idx in xrange(100):
       print(" [*] %d" % idx)
       z_sample = np.zeros([config.batch_size, dcgan.z_dim])
       for kdx, z in enumerate(z_sample):
         z[idx] = values[kdx]
 
       samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
-      make_gif(samples, os.path.join(sample_dir, 'test_gif_%s.gif' % (idx)))
+      make_gif(samples, './samples/test_gif_%s.gif' % (idx))
   elif option == 4:
     image_set = []
     values = np.arange(0, 1, 1./config.batch_size)
 
-    for idx in xrange(dcgan.z_dim):
+    for idx in xrange(100):
       print(" [*] %d" % idx)
       z_sample = np.zeros([config.batch_size, dcgan.z_dim])
       for kdx, z in enumerate(z_sample): z[idx] = values[kdx]
 
       image_set.append(sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample}))
-      make_gif(image_set[-1], os.path.join(sample_dir, 'test_gif_%s.gif' % (idx)))
+      make_gif(image_set[-1], './samples/test_gif_%s.gif' % (idx))
 
     new_image_set = [merge(np.array([images[idx] for images in image_set]), [10, 10]) \
         for idx in range(64) + range(63, -1, -1)]
     make_gif(new_image_set, './samples/test_gif_merged.gif', duration=8)
+  elif option == 6:
+    num_batch = 10
+    num_single = 500
+    for i in range(0,num_batch):
+      z_sample = np.random.uniform(-0.5, 0.5, size=(config.batch_size, dcgan.z_dim))
+      samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
+      #save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_%s.png' % strftime("%Y%m%d%H%M%S", gmtime()))
+      save_images(samples, [image_frame_dim, image_frame_dim],'./samples/' + config.dataset + '-' + (str)(config.batch_size) + '/test_b_%d.png'  % i)
 
+    for i in range(0,num_single):
+      z_sample = np.random.uniform(-0.5, 0.5, size=(config.batch_size, dcgan.z_dim))
+      samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
+      images = inverse_transform(samples)
+      #save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_%s.png' % strftime("%Y%m%d%H%M%S", gmtime()))
+      for im in images:
+          scipy.misc.imsave('./samples/' + config.dataset + '-' + (str)(config.batch_size) + '/test_%d.png' % i, np.squeeze(im))
+
+  elif option == 7:
+    num_batch = 10
+    num_single = 500
+    for i in range(0,num_batch):
+      z_sample = np.random.uniform(-1, 1, size=(config.batch_size, dcgan.z_dim))
+      samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
+      #save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_%s.png' % strftime("%Y%m%d%H%M%S", gmtime()))
+      save_images(samples, [image_frame_dim, image_frame_dim],'./samples/' + config.dataset + '-' + (str)(config.batch_size) + 'z1' + '/test_b_%d.png'  % i)
+
+    for i in range(0,num_single):
+      z_sample = np.random.uniform(-1, 1, size=(config.batch_size, dcgan.z_dim))
+      samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
+      images = inverse_transform(samples)
+      #save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_%s.png' % strftime("%Y%m%d%H%M%S", gmtime()))
+      for im in images:
+          scipy.misc.imsave('./samples/' + config.dataset + '-' + (str)(config.batch_size) + 'z1' + '/test_%d.png' % i, np.squeeze(im))
 
 def image_manifold_size(num_images):
   manifold_h = int(np.floor(np.sqrt(num_images)))
   manifold_w = int(np.ceil(np.sqrt(num_images)))
   assert manifold_h * manifold_w == num_images
   return manifold_h, manifold_w
+
+
+def loadRealLungs(FLAGS,grayscale):
+  with open(FLAGS.train_set_list_fname, 'r') as f:
+    data = f.readlines()
+
+  train_real_files = []
+  train_labels = []
+  for line in data:
+    words = line.split()
+    train_real_files.append(FLAGS.real_data_dir + '/' + words[0].split('/')[1])
+    train_labels.append(int(words[1]))
+
+  with open(FLAGS.test_set_list_fname, 'r') as f:
+    data = f.readlines()
+
+  test_real_files = []
+  test_labels = []
+  for line in data:
+    words = line.split()
+    test_real_files.append(FLAGS.real_data_dir + '/' + words[0].split('/')[1])
+    test_labels.append(words[1])
+
+  train_real_images = [imread(f, grayscale) for f in train_real_files]
+  test_real_images = [imread(f, grayscale) for f in test_real_files]
+
+  return ((train_real_images,train_labels),(test_real_images, test_labels))
